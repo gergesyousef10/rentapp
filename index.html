@@ -287,6 +287,11 @@ async function del(col,id){
   if(DB){try{await DB.collection(col).doc(id).delete()}catch(e){handleErr(e);throw e}}
   else{S[col]=S[col].filter(x=>x.id!==id);saveLocal();render()}
 }
+// items=[[col,id],...] — one Firestore batch so it is all-or-nothing (not awaited, like del, so it also works offline)
+async function delMany(items){
+  if(FB){const b=DB.batch();items.forEach(([c,id])=>b.delete(DB.collection(c).doc(id)));b.commit().catch(handleErr);return}
+  for(const [c,id] of items)await del(c,id);
+}
 function handleErr(e){
   const c=e&&e.code;
   if(c==="permission-denied"){setTimeout(()=>toast("⛔ الحساب ده مش مسموح له يعدّل — كلّم جرجس"),400);return}
@@ -1055,9 +1060,9 @@ document.addEventListener("click",e=>{
   if((v=g("data-editten"))){const x=D.tById[v];tenForm(x.unitId,x);return}
   if((v=g("data-newten"))){tenForm(v,null);return}
   if((v=g("data-endten"))){endForm(D.tById[v]);return}
-  if((v=g("data-delten"))){const id=v;confirmBox("تمسح المستأجر ده من السجل؟ (دفعاته هتفضل)",()=>del("tenancies",id));return}
+  if((v=g("data-delten"))){const id=v;const pays=()=>(D.payByT[id]||[]).map(p=>["payments",p.id]);const n=pays().length;confirmBox(n?`تمسح المستأجر ده من السجل وكل دفعاته (${n})؟`:"تمسح المستأجر ده من السجل؟",()=>delMany(pays().concat([["tenancies",id]])));return}
   if((v=g("data-editunit"))){unitForm(D.unitById[v]);return}
-  if((v=g("data-delunit"))){const id=v;const ps=S.payments.filter(p=>p.unitId===id);confirmBox(ps.length?`تمسح الوحدة دي و${ps.length} دفعة متسجلة عليها؟`:"تمسح الوحدة دي؟",async()=>{for(const p of ps)await del("payments",p.id);for(const x of (D.byUnit[id]||[]))if(S.tenancies.some(y=>y.id===x.id))await del("tenancies",x.id);await del("units",id);S.detail=null;render()});return}
+  if((v=g("data-delunit"))){const id=v;const pays=()=>S.payments.filter(p=>p.unitId===id).map(p=>["payments",p.id]);const n=pays().length;confirmBox(n?`تمسح الوحدة دي وكل الدفعات المتسجلة عليها (${n})؟`:"تمسح الوحدة دي؟",async()=>{const items=pays();(D.byUnit[id]||[]).forEach(x=>{if(S.tenancies.some(y=>y.id===x.id))items.push(["tenancies",x.id])});items.push(["units",id]);await delMany(items);S.detail=null;render()});return}
   if((v=g("data-delpay"))){const id=v;confirmBox("تمسح الدفعة دي؟",()=>del("payments",id));return}
   if((v=g("data-editexp"))){expForm(S.expenses.find(x=>x.id===v));return}
   if((v=g("data-delexp"))){const id=v;confirmBox("تمسح المصروف ده؟",()=>del("expenses",id));return}
