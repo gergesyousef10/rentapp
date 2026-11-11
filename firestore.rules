@@ -1,0 +1,27 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{db}/documents {
+    function email() { return request.auth.token.email.lower(); }
+    // Shared account (users/{email} exists) -> its owner's org; otherwise the account is its own org.
+    function myOrg() {
+      return exists(/databases/$(db)/documents/users/$(email()))
+        ? get(/databases/$(db)/documents/users/$(email())).data.org
+        : email();
+    }
+    function isData(col) {
+      return col in ['units','tenancies','payments','expenses','sales','salePayments'];
+    }
+    match /users/{e} {
+      allow read: if request.auth != null && e == email();
+      allow write: if false; // Firebase Console only
+    }
+    // Data collections are named on purpose: a generic {col} rule would let any client write users/* and add people to its own org.
+    match /{col}/{id} {
+      allow read:   if isData(col) && request.auth != null && resource.data.org == myOrg();
+      allow create: if isData(col) && request.auth != null && request.resource.data.org == myOrg();
+      allow update: if isData(col) && request.auth != null && resource.data.org == myOrg()
+                    && request.resource.data.org == resource.data.org;
+      allow delete: if isData(col) && request.auth != null && resource.data.org == myOrg();
+    }
+  }
+}
