@@ -120,6 +120,7 @@ tr.futr td{color:#aaa} tr.tot td{font-weight:800;border-bottom:0;background:var(
 .okc{color:var(--ok)} .badc{color:var(--bad)}
 .tabs button{font-size:14px}
 @media(max-width:560px){.stats.s3{grid-template-columns:repeat(2,1fr)}}
+.chk{display:flex;gap:8px;align-items:center;font-weight:700;margin:4px 0 8px;font-size:14px}.chk input{width:18px;height:18px}
 
 header.top h1{white-space:nowrap;font-size:20px}
 .badge-mode{white-space:nowrap}
@@ -299,7 +300,7 @@ async function migrate(){
   render();
 }
 const tStart=t=>(t.start||tsDate(t.createdAt)).slice(0,7);
-const tEnd=t=>t.end?t.end.slice(0,7):null;
+const tEnd=t=>t.end?(t.skipLast?addMonth(t.end.slice(0,7),-1):t.end.slice(0,7)):null;
 const activeIn=(t,m)=>tStart(t)<=m&&(!tEnd(t)||m<=tEnd(t));
 function rentAt(t,m){
   const r=(t.rents||[]).slice().sort((a,b)=>a.from.localeCompare(b.from));if(!r.length)return 0;
@@ -328,15 +329,18 @@ function derive(){
 const curT=uId=>{const a=(D.byUnit[uId]||[]).filter(t=>!t.end);return a[a.length-1]||null};
 const paid=(t,f)=>(D.payByT[t.id]||[]).filter(f||(()=>true)).reduce((a,p)=>a+(+p.amount||0),0);
 const balance=t=>chargesThrough(t,curMonth())-paid(t);
-const arrearsBefore=(t,m)=>chargesThrough(t,addMonth(m,-1))-paid(t,p=>p.month<m);
+const owedThrough=(t,m)=>Math.max(0,Math.round(chargesThrough(t,m)-paid(t,p=>p.month<=m)));
+const arrearsBefore=(t,m)=>activeIn(t,m)?stat(t,m).arr:owedThrough(t,m);
 function stat(t,m){
   const ch=charge(t,m),pd=paid(t,p=>p.month===m);
-  if(!ch){if(pd)return{k:"ok",t:"دفع ✓",ch,pd};const n=nextDue(t,m);return{k:"idle",t:n?"الدفعة الجاية "+monthLabel(n):"مفيش دفع",ch,pd}}
-  if(pd>=ch)return{k:"ok",t:pd>ch?"دفع زيادة":"دفع ✓",ch,pd};
-  if(m>curMonth())return{k:"idle",t:"لسه",ch,pd};
-  if(pd>0)return{k:"part",t:"دفع جزء",ch,pd};
+  const due=owedThrough(t,m);const rest=Math.min(Math.max(0,Math.round(ch-pd)),due);const arr=Math.max(0,due-rest);
+  const R=(k,tx)=>({k,t:tx,ch,pd,rest,arr});
+  if(!ch){if(pd)return R("ok","دفع ✓");const n=nextDue(t,m);return R("idle",n?"الدفعة الجاية "+monthLabel(n):"مفيش دفع")}
+  if(!rest)return R("ok",pd>=ch?(chargesThrough(t,m)<paid(t,p=>p.month<=m)-0.5?"دفع زيادة (له رصيد)":"دفع ✓"):"مغطّي من رصيده ✓");
+  if(m>curMonth())return R("idle","لسه");
+  if(rest<ch)return R("part","دفع جزء");
   const late=m<curMonth()||new Date().getDate()>(+t.dueDay||1);
-  return{k:"no",t:late?"متأخر":"ما دفعش",ch,pd};
+  return R("no",late?"متأخر":"ما دفعش");
 }
 const unitOf=t=>D.unitById[t.unitId]||{name:"وحدة محذوفة",place:"",kind:"أخرى"};
 const label=t=>{const u=unitOf(t);return u.name+(u.place?" - "+u.place:"")};
@@ -377,8 +381,8 @@ function viewMonth(){
   const al=contractAlerts();
   if(al.length)h+=`<div class="alerts">${al.map(a=>`<div class="alert ${a.d<0?"bad":""}" data-open="${a.t.unitId}">📄 عقد <b>${esc(a.t.tenant)}</b> (${esc(label(a.t))}) ${a.d<0?"خلص من "+(-a.d)+" يوم":a.d===0?"بيخلص النهارده":"بيخلص بعد "+a.d+" يوم — "+esc(a.t.contractEnd)}</div>`).join("")}</div>`;
   let exp=0,got=0,rest=0,cnt={ok:0,part:0,no:0,idle:0};
-  const rows=list.map(t=>{const st=stat(t,M);exp+=st.ch;got+=st.pd;rest+=Math.max(0,st.ch-st.pd);cnt[st.k]++;return{t,st,arr:Math.max(0,arrearsBefore(t,M))}});
-  const old=D.tens.reduce((a,t)=>a+Math.max(0,arrearsBefore(t,M)),0);
+  const rows=list.map(t=>{const st=stat(t,M);exp+=st.ch;got+=st.pd;rest+=st.rest;cnt[st.k]++;return{t,st,arr:st.arr}});
+  const old=D.tens.reduce((a,t)=>a+arrearsBefore(t,M),0);
   const ex=S.expenses.filter(e=>e.month===M).reduce((a,e)=>a+(+e.amount||0),0);
   const pct=exp?Math.min(100,Math.round(got/exp*100)):0;
   h+=`<div class="stats s3">
@@ -404,7 +408,7 @@ function viewMonth(){
   return h+fab("addunit","➕ إضافة وحدة");
 }
 function tenCard(t,st,arr,M){
-  const u=unitOf(t);const rest=Math.max(0,st.ch-st.pd);const owe=rest+arr;
+  const u=unitOf(t);const rest=st.rest;const owe=rest+arr;
   const wa=owe>0?waLink(t,owe,rest>0?M:null):null;const f=+t.freq||1;
   return `<div class="card"><div class="unit">
     <div class="ic">${KINDS[u.kind]||"🔑"}</div>
@@ -634,16 +638,20 @@ function endForm(t){
   ${b>0?`<div class="arr">لسه عليه <b>${money(b)}</b> — هيفضل متسجل عليه في "مستأجرين قبل كده".</div>`:b<0?`<div class="note">ليه رصيد ${money(-b)} (دفع زيادة).</div>`:""}
   ${t.deposit?`<div class="hint" style="margin-bottom:8px">التأمين: ${money(t.deposit)}</div>`:""}
   <form id="ef"><div class="f"><label>تاريخ الخروج</label><input name="end" type="date" required value="${today()}"></div>
+  <label class="chk"><input type="checkbox" name="lastm" checked> عليه إيجار شهر الخروج (<span id="lmname">${monthLabel(curMonth())}</span>)</label>
+  <div class="hint" style="margin:-4px 0 10px">شيل العلامة لو المستأجر الجديد هو اللي هيدفع الشهر ده.</div>
   <div class="f"><label>ملاحظة (مثلاً: رجعنا التأمين)</label><input name="note"></div>
   <div class="foot"><button class="btn primary" type="submit">تأكيد</button><button class="btn" type="button" data-act="close">إلغاء</button></div></form>`);
+  $("#ef [name=end]").oninput=e=>{const v=e.target.value;if(v)$("#lmname").textContent=monthLabel(v.slice(0,7))};
   $("#ef").onsubmit=async e=>{e.preventDefault();const fd=new FormData(e.target);const end=String(fd.get("end"));
     if(end<t.start){toast("التاريخ قبل بداية الإيجار");return}
-    try{await put("tenancies",{...t,end,endNote:String(fd.get("note")||"").trim()});closeModal();toast("اتسجل ✓ — الوحدة بقت فاضية")}catch(_){}};
+    try{await put("tenancies",{...t,end,skipLast:!fd.get("lastm"),endNote:String(fd.get("note")||"").trim()});closeModal();toast("اتسجل ✓ — الوحدة بقت فاضية")}catch(_){}};
 }
 function payForm(t){
-  const M=S.month;const st=activeIn(t,M)?stat(t,M):{ch:0,pd:0};const rest=Math.max(0,st.ch-st.pd);const b=Math.max(0,balance(t));
-  let defM=M;if(!rest){const ms=[];for(let i=mi(tStart(t));i<=mi(curMonth());i++){const m=im(i);if(charge(t,m)>paid(t,p=>p.month===m)){defM=m;break}}if(!activeIn(t,defM))defM=tEnd(t)||M}
-  const amt=rest||Math.max(0,charge(t,defM)-paid(t,p=>p.month===defM))||rentAt(t,defM)*(+t.freq||1);
+  const M=S.month;const b=Math.max(0,balance(t));let defM=M,amt=0;
+  if(activeIn(t,M)){const st=stat(t,M);if(st.arr>0){}else if(st.rest>0)amt=st.rest}
+  if(!amt){const last=tEnd(t)&&tEnd(t)<curMonth()?tEnd(t):curMonth();for(let i=mi(tStart(t));i<=mi(last);i++){const m=im(i);if(charge(t,m)>0&&owedThrough(t,m)>0){defM=m;amt=Math.min(owedThrough(t,m),charge(t,m));break}}}
+  if(!amt){defM=activeIn(t,M)&&isDue(t,M)?M:(nextDue(t,curMonth())||M);amt=charge(t,defM)||rentAt(t,defM)*(+t.freq||1)}
   modal(`<h3>💵 دفعة من ${esc(t.tenant)}</h3>
   <div class="hint" style="margin:-6px 0 12px">${esc(label(t))}${b>0?` — عليه إجمالي ${money(b)}`:""}</div>
   <form id="pf"><div class="row2"><div class="f"><label>المبلغ (ج.م)</label><input name="amount" type="number" inputmode="numeric" min="1" required value="${amt}"></div>
@@ -679,7 +687,7 @@ function confirmBox(text,onYes){
 }
 function copyList(){
   const M=S.month;
-  const lines=D.tens.map(t=>{const st=activeIn(t,M)?stat(t,M):{ch:0,pd:0};const rest=Math.max(0,st.ch-st.pd),arr=Math.max(0,arrearsBefore(t,M));return{t,rest,arr,tot:rest+arr}}).filter(r=>r.tot>0).sort((a,b)=>b.tot-a.tot);
+  const lines=D.tens.map(t=>{const st=activeIn(t,M)?stat(t,M):{rest:0,arr:owedThrough(t,M)};const rest=st.rest,arr=st.arr;return{t,rest,arr,tot:rest+arr}}).filter(r=>r.tot>0).sort((a,b)=>b.tot-a.tot);
   const txt=`اللي عليهم إيجار — ${monthLabel(M)}:\n`+lines.map(r=>`• ${r.t.tenant} (${label(r.t)}): ${money(r.tot)}${r.arr>0?` (منهم ${money(r.arr)} متأخرات)`:""}`).join("\n")+`\nالإجمالي: ${money(lines.reduce((a,r)=>a+r.tot,0))}`;
   (navigator.clipboard?navigator.clipboard.writeText(txt):Promise.reject()).then(()=>toast("اتنسخت ✓"),()=>modal(`<h3>انسخ القائمة</h3><textarea style="width:100%;height:220px;border:1px solid var(--line);border-radius:10px;padding:10px">${esc(txt)}</textarea><div class="foot"><button class="btn" data-act="close">تمام</button></div>`));
 }
@@ -687,7 +695,7 @@ function copyList(){
 /* ---------------- excel backup ---------------- */
 const SPECS={
   units:{sheet:"الوحدات",cols:[["place","المكان"],["name","الوحدة"],["kind","النوع"],["notes","ملاحظات"],["id","id"],["createdAt","createdAt","n"]]},
-  tenancies:{sheet:"المستأجرين",cols:[["_unit","الوحدة","ro"],["tenant","المستأجر"],["phone","التليفون"],["_rent","الإيجار دلوقتي","ro"],["_bal","عليه لحد النهارده","ro"],["start","البداية"],["end","خرج يوم"],["contractEnd","نهاية العقد"],["freq","كل كام شهر","n"],["dueDay","يوم الدفع","n"],["deposit","التأمين","n"],["incPct","زيادة سنوية %","n"],["notes","ملاحظات"],["endNote","ملاحظة الخروج"],["rents","تاريخ الإيجار (متعدلوش)","json"],["id","id"],["unitId","unitId"],["createdAt","createdAt","n"]]},
+  tenancies:{sheet:"المستأجرين",cols:[["_unit","الوحدة","ro"],["tenant","المستأجر"],["phone","التليفون"],["_rent","الإيجار دلوقتي","ro"],["_bal","عليه لحد النهارده","ro"],["start","البداية"],["end","خرج يوم"],["contractEnd","نهاية العقد"],["freq","كل كام شهر","n"],["dueDay","يوم الدفع","n"],["deposit","التأمين","n"],["incPct","زيادة سنوية %","n"],["notes","ملاحظات"],["endNote","ملاحظة الخروج"],["skipLast","شهر الخروج مش عليه (1=أيوه)","n"],["rents","تاريخ الإيجار (متعدلوش)","json"],["id","id"],["unitId","unitId"],["createdAt","createdAt","n"]]},
   payments:{sheet:"الدفعات",cols:[["date","التاريخ"],["_tenant","المستأجر","ro"],["_unit","الوحدة","ro"],["month","عن شهر"],["amount","المبلغ","n"],["method","الطريقة"],["note","ملاحظة"],["id","id"],["unitId","unitId"],["tenancyId","tenancyId"],["createdAt","createdAt","n"]]},
   expenses:{sheet:"المصاريف",cols:[["date","التاريخ"],["cat","البند"],["amount","المبلغ","n"],["place","المكان"],["note","ملاحظة"],["month","الشهر"],["id","id"],["createdAt","createdAt","n"]]}
 };
@@ -711,6 +719,7 @@ async function exportXlsx(){
   if(inClaude){toast("التنزيل مش متاح هنا");return}
   const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=fn;document.body.appendChild(a);a.click();try{localStorage.setItem("rent-last-backup",today())}catch(_){}backupNote();toast("اتنزّلت ✓ — هتلاقيها في التنزيلات");setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);
 }
+const xlDate=n=>new Date(Date.UTC(1899,11,30)+Math.round(n)*864e5).toISOString().slice(0,10);
 async function restoreXlsx(file){
   let wb;try{wb=await XL.read(await file.arrayBuffer())}catch(e){toast("الملف ده مش نسخة صحيحة");return}
   const found={};
@@ -718,6 +727,10 @@ async function restoreXlsx(file){
     const hdr=rows[0].map(h=>String(h==null?"":h).trim());const out=[];
     rows.slice(1).forEach(r=>{const o={};sp.cols.forEach(([k,h,ty])=>{if(ty==="ro")return;const i=hdr.indexOf(h);if(i<0)return;let v=r[i];if(v==null)v="";
       if(ty==="n")v=v===""?"":+v;else if(ty==="json"){try{v=JSON.parse(v||"[]")}catch(_){v=[]}}else v=String(v);if(k==="createdAt"&&v==="")v=Date.now();o[k]=v});
+      ["start","end","contractEnd","date"].forEach(k=>{if(/^\d{5}(\.\d+)?$/.test(String(o[k]||"")))o[k]=xlDate(+o[k])});
+      if(/^\d{5}(\.\d+)?$/.test(String(o.month||"")))o.month=xlDate(+o.month).slice(0,7);
+      if(o.phone&&/^1\d{9}$/.test(o.phone))o.phone="0"+o.phone;
+      if(col==="expenses"&&o.date&&!/^\d{4}-\d{2}$/.test(o.month||""))o.month=o.date.slice(0,7);
       if(o.id){if(col==="units")o.migrated=true;if(col==="tenancies"){o.freq=+o.freq||1;o.dueDay=+o.dueDay||1;o.deposit=+o.deposit||0;o.incPct=+o.incPct||0}if(col==="payments"||col==="expenses")o.amount=+o.amount||0;out.push(o)}});
     found[col]=out}
   const n=COLS.reduce((a,c)=>a+(found[c]||[]).length,0);
