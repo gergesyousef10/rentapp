@@ -257,7 +257,10 @@ const MONTHS=["يناير","فبراير","مارس","أبريل","مايو","ي
 const KINDS={"شقة":"🏢","محل":"🏪","عمارة":"🏬","مخزن":"📦","أخرى":"🔑"};
 const METHODS=["كاش","تحويل بنكي","إنستاباي","فودافون كاش"];
 const FREQS={1:"كل شهر",3:"كل 3 شهور",6:"كل 6 شهور",12:"كل سنة"};
-const CATS={"كهرباء":"⚡","مياه":"💧","صيانة":"🛠️","بواب":"🧑‍🔧","نظافة":"🧹","ضرايب":"🧾","أخرى":"📌"};
+const CATS={"كهرباء":"⚡","مياه":"💧","صيانة":"🛠️","بواب":"🧑‍🔧","نظافة":"🧹","ضرايب":"🧾","أخرى":"📌","دخل":"💰"};
+// "دخل" is an income entry (e.g. the restaurant's monthly takings): it adds to the net instead of subtracting
+const isInc=e=>e.cat==="دخل";const amt=a=>a.reduce((s,e)=>s+(+e.amount||0),0);
+const exSplit=a=>({ex:amt(a.filter(e=>!isInc(e))),inc:amt(a.filter(isInc))});
 const $=s=>document.querySelector(s);
 const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const money=n=>(Math.round(+n||0)).toLocaleString("en-US")+" ج.م";
@@ -473,7 +476,7 @@ function viewMonth(){
   let exp=0,got=0,rest=0,cnt={ok:0,part:0,no:0,idle:0};
   const rows=list.map(t=>{const st=stat(t,M);exp+=st.ch;got+=st.pd;rest+=st.rest;cnt[st.k]++;return{t,st,arr:st.arr}});
   const old=D.tens.reduce((a,t)=>a+arrearsBefore(t,M),0);
-  const ex=S.expenses.filter(e=>e.month===M).reduce((a,e)=>a+(+e.amount||0),0);
+  const {ex,inc}=exSplit(S.expenses.filter(e=>e.month===M));
   const pct=exp?Math.min(100,Math.round(got/exp*100)):0;
   h+=`<div class="stats s3">
     <div class="stat"><div class="l">المفروض الشهر ده</div><div class="v">${money(exp)}</div></div>
@@ -481,7 +484,7 @@ function viewMonth(){
     <div class="stat bad"><div class="l">الباقي من الشهر</div><div class="v">${money(rest)}</div></div>
     <div class="stat ${old>0?"bad":""}"><div class="l">متأخرات شهور فاتت</div><div class="v">${money(old)}</div></div>
     <div class="stat"><div class="l">مصاريف الشهر</div><div class="v">${money(ex)}</div></div>
-    <div class="stat ${got-ex>=0?"ok":"bad"}"><div class="l">الصافي</div><div class="v">${money(got-ex)}</div></div>
+    <div class="stat ${got+inc-ex>=0?"ok":"bad"}"><div class="l">الصافي</div><div class="v">${money(got+inc-ex)}</div></div>
   </div><div class="progress"><span style="width:${pct}%"></span></div>`;
   if(!list.length)return h+'<div class="empty">مفيش وحدات مؤجّرة في الشهر ده.</div>'+fab("addunit","➕ إضافة وحدة");
   const F=[["all","الكل",list.length],["no","ما دفعوش",cnt.no],["part","دفعوا جزء",cnt.part],["ok","دفعوا",cnt.ok],["arr","عليهم متأخرات",rows.filter(r=>r.arr>0).length]];
@@ -600,12 +603,12 @@ function viewDetail(){
 function viewExpenses(){
   const M=S.month;
   const list=S.expenses.filter(e=>e.month===M).sort((a,b)=>(b.date||"").localeCompare(a.date||""));
-  const tot=list.reduce((a,e)=>a+(+e.amount||0),0);
+  const {ex:tot,inc}=exSplit(list);
   const got=S.payments.filter(p=>p.month===M).reduce((a,p)=>a+(+p.amount||0),0);
   let h=monthBar()+`<div class="stats s3">
-   <div class="stat ok"><div class="l">اتحصّل إيجار</div><div class="v">${money(got)}</div></div>
+   <div class="stat ok"><div class="l">${inc?"اتحصّل إيجار + دخل":"اتحصّل إيجار"}</div><div class="v">${money(got+inc)}</div></div>
    <div class="stat bad"><div class="l">المصاريف</div><div class="v">${money(tot)}</div></div>
-   <div class="stat"><div class="l">الصافي</div><div class="v">${money(got-tot)}</div></div></div>`;
+   <div class="stat"><div class="l">الصافي</div><div class="v">${money(got+inc-tot)}</div></div></div>`;
   if(!list.length)h+=`<div class="empty"><div class="big">🧾</div><h3>مفيش مصاريف في ${monthLabel(M)}</h3><p>سجّل الكهربا، المية، الصيانة، البواب… عشان تعرف الصافي الحقيقي.</p></div>`;
   else{
     const bc={};list.forEach(e=>bc[e.cat||"أخرى"]=(bc[e.cat||"أخرى"]||0)+(+e.amount||0));
@@ -620,8 +623,8 @@ function yearData(y){
   const rows=[];for(let k=1;k<=12;k++){const m=y+"-"+pad(k);
     const exp=D.tens.reduce((a,t)=>a+charge(t,m),0);
     const got=S.payments.filter(p=>p.month===m).reduce((a,p)=>a+(+p.amount||0),0);
-    const ex=S.expenses.filter(e=>e.month===m).reduce((a,e)=>a+(+e.amount||0),0);
-    rows.push({m,exp,got,ex,net:got-ex})}
+    const {ex,inc}=exSplit(S.expenses.filter(e=>e.month===m));
+    rows.push({m,exp,got:got+inc,ex,net:got+inc-ex})}
   return rows;
 }
 function viewReports(){
@@ -638,7 +641,7 @@ function viewReports(){
   <tr class="tot"><td>الإجمالي</td><td>${fmt(T.exp)}</td><td>${fmt(T.got)}</td><td>${fmt(T.ex)}</td><td>${fmt(T.net)}</td></tr></tbody></table></div>`;
   const P={};const yp=String(y);
   S.payments.filter(p=>p.month.startsWith(yp)).forEach(p=>{const t=D.tById[p.tenancyId];const u=D.unitById[p.unitId]||(t&&unitOf(t))||{};const k=u.place||"بدون مكان";(P[k]=P[k]||{got:0,ex:0}).got+=+p.amount||0});
-  S.expenses.filter(e=>e.month.startsWith(yp)).forEach(e=>{const k=e.place||"عام";(P[k]=P[k]||{got:0,ex:0}).ex+=+e.amount||0});
+  S.expenses.filter(e=>e.month.startsWith(yp)).forEach(e=>{const k=e.place||"عام";const p=(P[k]=P[k]||{got:0,ex:0});if(isInc(e))p.got+=+e.amount||0;else p.ex+=+e.amount||0});
   const pk=Object.keys(P);
   if(pk.length)h+=`<h2 class="sec">حسب المكان</h2><div class="card tbl"><table><thead><tr><th>المكان</th><th>اتحصّل</th><th>المصاريف</th><th>الصافي</th></tr></thead><tbody>${pk.sort((a,b)=>P[b].got-P[a].got).map(k=>`<tr><td>${esc(k)}</td><td class="okc">${fmt(P[k].got)}</td><td class="badc">${fmt(P[k].ex)}</td><td><b>${fmt(P[k].got-P[k].ex)}</b></td></tr>`).join("")}</tbody></table></div>`;
   const debt=D.tens.map(t=>({t,b:balance(t)})).filter(x=>x.b>0).sort((a,b)=>b.b-a.b);
