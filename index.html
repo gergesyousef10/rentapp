@@ -276,9 +276,9 @@ let DB=null,canWrite=true,inClaude=false,migrated=false;
 const LKEY="rent-book-v1";
 function loadLocal(){try{const d=JSON.parse(localStorage.getItem(LKEY)||"{}");COLS.forEach(c=>S[c]=d[c]||[])}catch(e){}}
 function saveLocal(){try{const o={};COLS.forEach(c=>o[c]=S[c]);localStorage.setItem(LKEY,JSON.stringify(o))}catch(e){}}
-let FB=false,FBUSER=null,FBDENIED=false;
+let FB=false,FBUSER=null,FBDENIED=false,ORG=null;
 async function put(col,obj,quiet){
-  if(FB){DB.collection(col).doc(obj.id).set(JSON.parse(JSON.stringify(obj))).catch(handleErr);return}
+  if(FB){obj.org=ORG;DB.collection(col).doc(obj.id).set(JSON.parse(JSON.stringify(obj))).catch(handleErr);return}
   if(DB){try{await DB.collection(col).doc(obj.id).set(obj)}catch(e){handleErr(e);throw e}}
   else{const a=S[col];const i=a.findIndex(x=>x.id===obj.id);if(i>=0)a[i]=obj;else a.push(obj);saveLocal();if(!quiet)render()}
 }
@@ -324,7 +324,7 @@ function initFirebase(){
   let unsubs=[];
   firebase.auth().onAuthStateChanged(user=>{
     unsubs.forEach(u=>{try{u()}catch(_){}});unsubs=[];
-    if(!user){FBUSER=null;DB=null;S.ready=false;FBDENIED=false;COLS.forEach(c=>S[c]=[]);S.detail=null;S.sale=null;showLogin();return}
+    if(!user){FBUSER=null;ORG=null;DB=null;S.ready=false;FBDENIED=false;COLS.forEach(c=>S[c]=[]);S.detail=null;S.sale=null;showLogin();return}
     FBUSER=user.email;DB=fs;document.querySelector(".tabs").style.display="";setMode();
     S.ready=false;render();
     const got={},srv={};let checked=false;
@@ -333,7 +333,11 @@ function initFirebase(){
       if(!S.ready&&COLS.every(c=>got[c])){S.ready=true;clearTimeout(timer)}
       if(!checked&&COLS.every(c=>srv[c])){checked=true;uploadLocalIfCloudEmpty()}
       render()};
-    COLS.forEach(c=>unsubs.push(fs.collection(c).onSnapshot(s=>{S[c]=s.docs.map(d=>d.data());got[c]=true;if(!s.metadata.fromCache)srv[c]=true;done()},e=>{got[c]=true;if(e&&e.code==="permission-denied"){FBDENIED=true}else handleErr(e);done()})));
+    // org = users/{email}.org for a shared account, else the account's own email (see docs/superpowers/specs/2026-11-11-multi-tenant-design.md)
+    const email=String(user.email||"").toLowerCase();
+    fs.collection("users").doc(email).get().then(d=>d.exists&&d.data().org||email,()=>email).then(org=>{ORG=org;
+      COLS.forEach(c=>unsubs.push(fs.collection(c).where("org","==",ORG).onSnapshot(s=>{S[c]=s.docs.map(d=>d.data());got[c]=true;if(!s.metadata.fromCache)srv[c]=true;done()},e=>{got[c]=true;if(e&&e.code==="permission-denied"){FBDENIED=true}else handleErr(e);done()})));
+    });
   });
 }
 function uploadLocalIfCloudEmpty(){
@@ -341,7 +345,7 @@ function uploadLocalIfCloudEmpty(){
   let L={};try{L=JSON.parse(localStorage.getItem(LKEY)||"{}")}catch(e){}
   const all=[];COLS.forEach(c=>(L[c]||[]).forEach(o=>all.push([c,o])));
   if(!all.length)return;
-  for(let i=0;i<all.length;i+=400){const b=DB.batch();all.slice(i,i+400).forEach(([c,o])=>b.set(DB.collection(c).doc(o.id),JSON.parse(JSON.stringify(o))));b.commit().catch(handleErr)}
+  for(let i=0;i<all.length;i+=400){const b=DB.batch();all.slice(i,i+400).forEach(([c,o])=>b.set(DB.collection(c).doc(o.id),JSON.parse(JSON.stringify({...o,org:ORG}))));b.commit().catch(handleErr)}
   toast("اترفعت البيانات اللي كانت على الموبايل ✓");
 }
 async function init(){
