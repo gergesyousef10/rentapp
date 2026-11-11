@@ -1057,7 +1057,7 @@ document.addEventListener("click",e=>{
   if((v=g("data-endten"))){endForm(D.tById[v]);return}
   if((v=g("data-delten"))){const id=v;confirmBox("تمسح المستأجر ده من السجل؟ (دفعاته هتفضل)",()=>del("tenancies",id));return}
   if((v=g("data-editunit"))){unitForm(D.unitById[v]);return}
-  if((v=g("data-delunit"))){const id=v;confirmBox("تمسح الوحدة دي؟",async()=>{for(const x of (D.byUnit[id]||[]))if(S.tenancies.some(y=>y.id===x.id))await del("tenancies",x.id);await del("units",id);S.detail=null;render()});return}
+  if((v=g("data-delunit"))){const id=v;const ps=S.payments.filter(p=>p.unitId===id);confirmBox(ps.length?`تمسح الوحدة دي و${ps.length} دفعة متسجلة عليها؟`:"تمسح الوحدة دي؟",async()=>{for(const p of ps)await del("payments",p.id);for(const x of (D.byUnit[id]||[]))if(S.tenancies.some(y=>y.id===x.id))await del("tenancies",x.id);await del("units",id);S.detail=null;render()});return}
   if((v=g("data-delpay"))){const id=v;confirmBox("تمسح الدفعة دي؟",()=>del("payments",id));return}
   if((v=g("data-editexp"))){expForm(S.expenses.find(x=>x.id===v));return}
   if((v=g("data-delexp"))){const id=v;confirmBox("تمسح المصروف ده؟",()=>del("expenses",id));return}
