@@ -35,21 +35,21 @@
 **Interfaces:**
 - Produces: every doc in the six collections has `org === "gergesyousef10@gmail.com"`.
 
-- [ ] **Step 1: Count docs missing `org` (expected: all of them)**
+- [x] **Step 1: Count docs missing `org` (expected: all of them)**
 
 ```js
 (async()=>{const fs=firebase.firestore();const COLS=["units","tenancies","payments","expenses","sales","salePayments"];const r={};for(const c of COLS){const s=await fs.collection(c).get({source:"server"});r[c]={total:s.size,missingOrg:s.docs.filter(d=>!d.data().org).length}}return r})()
 ```
 Expected: `missingOrg === total` for every collection (≈22/21/18/0/0/0).
 
-- [ ] **Step 2: Stamp `org` in batches of ≤400**
+- [x] **Step 2: Stamp `org` in batches of ≤400**
 
 ```js
 (async()=>{const fs=firebase.firestore();const ORG="gergesyousef10@gmail.com";const COLS=["units","tenancies","payments","expenses","sales","salePayments"];let n=0,b=fs.batch(),k=0;for(const c of COLS){const s=await fs.collection(c).get({source:"server"});for(const d of s.docs){if(d.data().org===ORG)continue;b.update(d.ref,{org:ORG});n++;if(++k===400){await b.commit();b=fs.batch();k=0}}}if(k)await b.commit();return{updated:n}})()
 ```
 Expected: `updated` ≈ 61.
 
-- [ ] **Step 3: Re-run Step 1**
+- [x] **Step 3: Re-run Step 1**
 
 Expected: `missingOrg === 0` everywhere, totals unchanged.
 
@@ -63,7 +63,7 @@ Expected: `missingOrg === 0` everywhere, totals unchanged.
 **Interfaces:**
 - Produces: doc `users/magedyousef20@gmail.com` = `{org:"gergesyousef10@gmail.com"}`.
 
-- [ ] **Step 1: Write the doc**
+- [x] **Step 1: Write the doc**
 
 ```js
 (async()=>{const fs=firebase.firestore();const id="magedyousef20@gmail.com";await fs.collection("users").doc(id).set({org:"gergesyousef10@gmail.com"});return (await fs.collection("users").doc(id).get({source:"server"})).data()})()
@@ -80,15 +80,15 @@ Expected: `{org:"gergesyousef10@gmail.com"}`.
 **Interfaces:**
 - Produces: global `let ORG=null` (string after login). `put(col,obj,quiet)` unchanged signature; it sets `obj.org=ORG` when `FB`. `uploadLocalIfCloudEmpty()` sets `org:ORG` on each uploaded object.
 
-- [ ] **Step 1: Add the global**
+- [x] **Step 1: Add the global**
 
 `index.html:279` → `let FB=false,FBUSER=null,FBDENIED=false,ORG=null;`
 
-- [ ] **Step 2: Stamp writes in `put()`**
+- [x] **Step 2: Stamp writes in `put()`**
 
 First line inside `put`: `if(FB)obj.org=ORG;` (before the `DB.collection(col).doc(obj.id).set(...)` line). Same stamp in `uploadLocalIfCloudEmpty()`: `b.set(DB.collection(c).doc(o.id),JSON.parse(JSON.stringify({...o,org:ORG})))`.
 
-- [ ] **Step 3: Resolve `ORG` after login, then attach filtered listeners**
+- [x] **Step 3: Resolve `ORG` after login, then attach filtered listeners**
 
 In `onAuthStateChanged`, after `FBUSER=user.email;DB=fs;` and before the listeners are created, make the listener setup async:
 
@@ -98,7 +98,7 @@ fs.collection("users").doc(email).get().then(d=>d.exists&&d.data().org||email,()
 ```
 Each listener becomes `fs.collection(c).where("org","==",ORG).onSnapshot(...)`. The 8-second `timer`, `done()`, `got/srv` bookkeeping stay as they are, inside the `.then`. On sign-out (`if(!user){...}`) add `ORG=null;`.
 
-- [ ] **Step 4: Syntax check**
+- [x] **Step 4: Syntax check**
 
 Run (from `~/rentapp`):
 ```bash
@@ -106,7 +106,7 @@ awk '/<script>$/{p=1;next} /<\/script>/{p=0} p' index.html > /tmp/main.js && nod
 ```
 Expected: `OK`.
 
-- [ ] **Step 5: Commit and push**
+- [x] **Step 5: Commit and push**
 
 ```bash
 git add index.html
@@ -115,7 +115,7 @@ git push origin main
 ```
 Then wait until `curl -s https://gergesyousef10.github.io/rentapp/index.html | grep -c 'where("org"'` prints `1` (≈40 s).
 
-- [ ] **Step 6: Verify the owner still sees everything**
+- [x] **Step 6: Verify the owner still sees everything**
 
 In the browser: `fetch('./',{cache:'reload'})` then reload; Month tab shows **المفروض 382,300 / اتحصّل 234,500 / 21 tenant cards**; Units tab **22**. No toast "اترفعت البيانات اللي كانت على الموبايل" (that would mean Review Focus #2 fired — stop and investigate).
 
@@ -129,17 +129,17 @@ In the browser: `fetch('./',{cache:'reload'})` then reload; Month tab shows **ا
 **Interfaces:**
 - Consumes: `org` field from Task 1/3, `users/{email}` from Task 2.
 
-- [ ] **Step 1: Add `firestore.rules` to the repo and commit**
+- [x] **Step 1: Add `firestore.rules` to the repo and commit**
 
 ```bash
 git add firestore.rules && git commit -m "Add per-org Firestore rules" && git push origin main
 ```
 
-- [ ] **Step 2: Publish in Firebase Console (owner does this; agent dictates)**
+- [x] **Step 2: Publish in Firebase Console (owner does this; agent dictates)**
 
 Console → Firestore Database → Rules → replace all → **Publish**. Before publishing, in the Rules Playground: `get /databases/(default)/documents/users/magedyousef20@gmail.com` authenticated as email `Magedyousef20@gmail.com` (capital M) → **Allowed** (proves the `.lower()` in Review Focus #1).
 
-- [ ] **Step 3: Owner sanity check**
+- [x] **Step 3: Owner sanity check**
 
 Reload the app as the owner: same numbers as Task 3 Step 6, no "⛔ الحساب ده مش مسموح له" screen.
 
@@ -149,28 +149,28 @@ Reload the app as the owner: same numbers as Task 3 Step 6, no "⛔ الحساب
 
 **Files:** none.
 
-- [ ] **Step 1: Owner creates a throw-away account in Console** (Authentication → Add user, e.g. `test-org@example.com`; owner types the password, agent never sees it) and signs in with it in the browser pane.
+- [x] **Step 1: Owner creates a throw-away account in Console** (Authentication → Add user, e.g. `test-org@example.com`; owner types the password, agent never sees it) and signs in with it in the browser pane.
 
-- [ ] **Step 2: Empty tenant**
+- [x] **Step 2: Empty tenant**
 
 Expected: Month tab shows the empty state "مفيش وحدات" and **no** toast about uploading phone data. Add a unit "تجربة" with tenant "ت" rent 1 → it appears. Switch to the owner account → the unit is **not** there.
 
-- [ ] **Step 3: Cross-org read is denied** (signed in as the test account)
+- [x] **Step 3: Cross-org read is denied** (signed in as the test account)
 
 ```js
 (async()=>{try{const d=await firebase.firestore().collection("units").doc("u1").get({source:"server"});return{exists:d.exists,data:!!d.data()}}catch(e){return e.code}})()
 ```
 Expected: `"permission-denied"`. (If `u1` does not exist, pick any id from Task 1 Step 1's listing.)
 
-- [ ] **Step 4: Backup restore still writes** (owner account)
+- [x] **Step 4: Backup restore still writes** (owner account)
 
 Download the Excel backup, immediately restore it: toast "اترجعت البيانات ✓", counts unchanged (upsert of identical docs). This proves `restoreXlsx → put()` stamps `org` and passes the rules.
 
-- [ ] **Step 5: Brother check**
+- [x] **Step 5: Brother check**
 
 Brother signs in on his phone → same data as the owner. Then delete the test account in Console (and its "تجربة" docs are harmless orphans in a dead org; delete them from Console if desired).
 
-- [ ] **Step 6: Commit the plan with boxes ticked**
+- [x] **Step 6: Commit the plan with boxes ticked**
 
 ```bash
 git add docs && git commit -m "Multi-tenant rollout done" && git push origin main
