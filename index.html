@@ -314,8 +314,12 @@ function showLogin(msg){
    <form id="lf"><div class="f"><label>الإيميل</label><input name="email" type="email" dir="ltr" autocomplete="username" required></div>
    <div class="f"><label>الباسورد</label><input name="pass" type="password" dir="ltr" autocomplete="current-password" required></div>
    ${msg?`<div class="arr" style="margin-bottom:10px">${esc(msg)}</div>`:""}
-   <button class="btn primary block" type="submit">دخول</button></form>
+   <button class="btn primary block" type="submit">دخول</button>
+   <button class="btn block" type="button" id="forgot" style="margin-top:8px">نسيت الباسورد؟</button></form>
    <p class="hint" style="text-align:center;margin-bottom:0">بتدخل مرة واحدة بس على كل موبايل.</p></div>`;
+  $("#forgot").onclick=()=>{const em=$("#lf [name=email]").value.trim();if(!em){toast("اكتب الإيميل الأول وبعدين دوس نسيت الباسورد");return}
+    // same message whether or not the email exists, so the screen can't be used to check who has an account
+    firebase.auth().sendPasswordResetEmail(em).then(()=>toast("لو الإيميل ده متسجل، هيوصله لينك تغيير الباسورد ✓"),err=>toast((err&&err.code||"").includes("network")?"مفيش نت — اتأكد من الاتصال":"لو الإيميل ده متسجل، هيوصله لينك تغيير الباسورد ✓"))};
   $("#lf").onsubmit=e=>{e.preventDefault();const fd=new FormData(e.target);const b=$("#lf button");b.disabled=true;b.textContent="جاري الدخول…";
     firebase.auth().signInWithEmailAndPassword(String(fd.get("email")).trim(),String(fd.get("pass"))).catch(err=>{
       const c=err&&err.code||"";const m=c.includes("network")?"مفيش نت — اتأكد من الاتصال":c.includes("too-many")?"محاولات كتير — استنى شوية وجرب تاني":"الإيميل أو الباسورد غلط";showLogin(m)})};
