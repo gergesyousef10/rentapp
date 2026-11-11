@@ -145,6 +145,20 @@ header.top h1{white-space:nowrap;font-size:20px}
 </div>
 <div id="layer"></div>
 <script>
+/* ===== Firebase: paste your config here (or leave null to keep data only on this phone) ===== */
+window.FIREBASE_CONFIG = {
+  apiKey: "AIzaSyAnHQPuAaLHNK4Oq3ZKT1UcEfsAg4YC8ck",
+  authDomain: "rentapp-b33d3.firebaseapp.com",
+  projectId: "rentapp-b33d3",
+  storageBucket: "rentapp-b33d3.firebasestorage.app",
+  messagingSenderId: "930925244499",
+  appId: "1:930925244499:web:3cf8269ce3d74c2be3d6a6"
+};
+</script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+<script>
 /* Minimal XLSX writer/reader (no dependencies). XL.write(sheets) -> Uint8Array ; XL.read(ArrayBuffer) -> Promise<{name:rows[][]}> */
 const XL=(function(){
   const enc=new TextEncoder();
@@ -258,21 +272,71 @@ let DB=null,canWrite=true,inClaude=false,migrated=false;
 const LKEY="rent-book-v1";
 function loadLocal(){try{const d=JSON.parse(localStorage.getItem(LKEY)||"{}");COLS.forEach(c=>S[c]=d[c]||[])}catch(e){}}
 function saveLocal(){try{const o={};COLS.forEach(c=>o[c]=S[c]);localStorage.setItem(LKEY,JSON.stringify(o))}catch(e){}}
+let FB=false,FBUSER=null;
 async function put(col,obj,quiet){
+  if(FB){DB.collection(col).doc(obj.id).set(JSON.parse(JSON.stringify(obj))).catch(handleErr);return}
   if(DB){try{await DB.collection(col).doc(obj.id).set(obj)}catch(e){handleErr(e);throw e}}
   else{const a=S[col];const i=a.findIndex(x=>x.id===obj.id);if(i>=0)a[i]=obj;else a.push(obj);saveLocal();if(!quiet)render()}
 }
 async function del(col,id){
+  if(FB){DB.collection(col).doc(id).delete().catch(handleErr);return}
   if(DB){try{await DB.collection(col).doc(id).delete()}catch(e){handleErr(e);throw e}}
   else{S[col]=S[col].filter(x=>x.id!==id);saveLocal();render()}
 }
 function handleErr(e){
   const c=e&&e.code;
+  if(c==="permission-denied"){setTimeout(()=>toast("⛔ الحساب ده مش مسموح له يعدّل — كلّم جرجس"),400);return}
   if(c==="invalid_argument"){canWrite=false;toast("مش مسموح لك تعدّل — اطلب صلاحية Contributor");render()}
   else if(c==="quota_exceeded")toast("المساحة اتملت — امسح بيانات قديمة");
   else toast("حصلت مشكلة، جرّب تاني");
 }
+/* ---------- Firebase sync ---------- */
+function setMode(){if(!FB)return;$("#mode").textContent=navigator.onLine?"☁️ متزامن":"☁️ من غير نت — هيترفع لما يرجع"}
+window.addEventListener("online",setMode);window.addEventListener("offline",setMode);
+function showLogin(msg){
+  document.querySelector(".tabs").style.display="none";$("#note").innerHTML="";
+  $("#mode").textContent="☁️";
+  $("#app").innerHTML=`<div class="card" style="max-width:420px;margin:30px auto;padding:22px">
+   <div style="text-align:center;font-size:42px">🔐</div><h3 style="text-align:center;margin:6px 0 14px">تسجيل الدخول</h3>
+   <form id="lf"><div class="f"><label>الإيميل</label><input name="email" type="email" dir="ltr" autocomplete="username" required></div>
+   <div class="f"><label>الباسورد</label><input name="pass" type="password" dir="ltr" autocomplete="current-password" required></div>
+   ${msg?`<div class="arr" style="margin-bottom:10px">${esc(msg)}</div>`:""}
+   <button class="btn primary block" type="submit">دخول</button></form>
+   <p class="hint" style="text-align:center;margin-bottom:0">بتدخل مرة واحدة بس على كل موبايل.</p></div>`;
+  $("#lf").onsubmit=e=>{e.preventDefault();const fd=new FormData(e.target);const b=$("#lf button");b.disabled=true;b.textContent="جاري الدخول…";
+    firebase.auth().signInWithEmailAndPassword(String(fd.get("email")).trim(),String(fd.get("pass"))).catch(err=>{
+      const c=err&&err.code||"";const m=c.includes("network")?"مفيش نت — اتأكد من الاتصال":c.includes("too-many")?"محاولات كتير — استنى شوية وجرب تاني":"الإيميل أو الباسورد غلط";showLogin(m)})};
+}
+function initFirebase(){
+  FB=true;canWrite=true;
+  firebase.initializeApp(window.FIREBASE_CONFIG);
+  const fs=firebase.firestore();
+  try{fs.enablePersistence({synchronizeTabs:true}).catch(()=>{})}catch(e){}
+  let unsubs=[];
+  firebase.auth().onAuthStateChanged(user=>{
+    unsubs.forEach(u=>{try{u()}catch(_){}});unsubs=[];
+    if(!user){FBUSER=null;DB=null;S.ready=false;showLogin();return}
+    FBUSER=user.email;DB=fs;document.querySelector(".tabs").style.display="";setMode();
+    S.ready=false;render();
+    const got={},srv={};let checked=false;
+    const timer=setTimeout(()=>{if(!S.ready){COLS.forEach(c=>got[c]=true);S.ready=true;render()}},8000);
+    const done=()=>{
+      if(!S.ready&&COLS.every(c=>got[c])){S.ready=true;clearTimeout(timer)}
+      if(!checked&&COLS.every(c=>srv[c])){checked=true;uploadLocalIfCloudEmpty()}
+      render()};
+    COLS.forEach(c=>unsubs.push(fs.collection(c).onSnapshot(s=>{S[c]=s.docs.map(d=>d.data());got[c]=true;if(!s.metadata.fromCache)srv[c]=true;done()},e=>{got[c]=true;handleErr(e);done()})));
+  });
+}
+function uploadLocalIfCloudEmpty(){
+  if(COLS.some(c=>S[c].length))return;
+  let L={};try{L=JSON.parse(localStorage.getItem(LKEY)||"{}")}catch(e){}
+  const all=[];COLS.forEach(c=>(L[c]||[]).forEach(o=>all.push([c,o])));
+  if(!all.length)return;
+  for(let i=0;i<all.length;i+=400){const b=DB.batch();all.slice(i,i+400).forEach(([c,o])=>b.set(DB.collection(c).doc(o.id),JSON.parse(JSON.stringify(o))));b.commit().catch(handleErr)}
+  toast("اترفعت البيانات اللي كانت على الموبايل ✓");
+}
 async function init(){
+  if(window.FIREBASE_CONFIG&&window.firebase){initFirebase();return}
   let db=null;
   inClaude=!!(window.claude&&window.claude.use);
   try{if(inClaude)db=await window.claude.use("db")}catch(e){db=null}
@@ -360,6 +424,7 @@ function contractAlerts(){
 
 /* ---------------- render ---------------- */
 function render(){
+  if(FB&&!FBUSER)return;
   document.querySelectorAll(".tabs button").forEach(b=>b.classList.toggle("on",b.dataset.tab===S.tab&&!S.detail));
   const app=$("#app");
   if(!S.ready){app.innerHTML='<div class="empty">جاري التحميل…</div>';return}
@@ -553,6 +618,7 @@ function viewReports(){
   if(pk.length)h+=`<h2 class="sec">حسب المكان</h2><div class="card tbl"><table><thead><tr><th>المكان</th><th>اتحصّل</th><th>المصاريف</th><th>الصافي</th></tr></thead><tbody>${pk.sort((a,b)=>P[b].got-P[a].got).map(k=>`<tr><td>${esc(k)}</td><td class="okc">${fmt(P[k].got)}</td><td class="badc">${fmt(P[k].ex)}</td><td><b>${fmt(P[k].got-P[k].ex)}</b></td></tr>`).join("")}</tbody></table></div>`;
   const debt=D.tens.map(t=>({t,b:balance(t)})).filter(x=>x.b>0).sort((a,b)=>b.b-a.b);
   if(debt.length)h+=`<h2 class="sec">مين عليه فلوس لحد النهارده</h2><div class="card">${debt.map(x=>`<div class="pay" data-open="${x.t.unitId}" style="cursor:pointer"><div><b>${esc(x.t.tenant)}</b>${x.t.end?' <span class="pill idle">خرج</span>':""}<div class="hint">${esc(label(x.t))}</div></div><b style="color:var(--bad)">${money(x.b)}</b></div>`).join("")}</div>`;
+  if(FB)h+=`<h2 class="sec">👤 الحساب</h2><div class="card"><div class="pay"><div><div class="hint">داخل بـ</div><b dir="ltr">${esc(FBUSER||"")}</b></div><button class="btn" data-act="logout">خروج</button></div><div class="hint">البيانات متزامنة أونلاين: أي حاجة تتسجل على موبايل بتظهر على التاني.</div></div>`;
   h+=`<h2 class="sec">💾 نسخة احتياطية</h2><div class="card">
    <p class="hint" style="margin-top:0">نزّل ملف Excel فيه كل حاجة: الوحدات، المستأجرين، الدفعات، المصاريف وتقرير السنة. احتفظ بيه في مكان أمان، وتقدر ترجّع منه البيانات لو حاجة اتمسحت.</p>
    <div class="actions wr"><button class="btn primary" data-act="export">📥 نزّل نسخة Excel</button>
@@ -681,8 +747,8 @@ function expForm(x){
     if(o.amount<=0){toast("اكتب المبلغ");return}
     try{await put("expenses",o);closeModal();toast("اتحفظ ✓")}catch(_){}};
 }
-function confirmBox(text,onYes){
-  modal(`<h3>${text}</h3><div class="foot"><button class="btn danger" id="yes">أيوه، امسح</button><button class="btn" data-act="close">لأ</button></div>`);
+function confirmBox(text,onYes,yes){
+  modal(`<h3>${text}</h3><div class="foot"><button class="btn danger" id="yes">${yes||"أيوه، امسح"}</button><button class="btn" data-act="close">لأ</button></div>`);
   $("#yes").onclick=async()=>{try{await onYes();closeModal()}catch(_){}};
 }
 function copyList(){
@@ -759,6 +825,7 @@ document.addEventListener("click",e=>{
     else if(k==="back"){S.detail=null;render();scrollTo(0,0)}
     else if(k==="copylist")copyList();
     else if(k==="export")exportXlsx();
+    else if(k==="logout")confirmBox("تخرج من الحساب؟",()=>firebase.auth().signOut(),"أيوه، اخرج");
     return}
   const f=t.closest("[data-filter]");if(f){S.filter=f.dataset.filter;render();return}
   const g=(attr)=>{const el=t.closest("["+attr+"]");return el?el.getAttribute(attr):null};
@@ -780,7 +847,7 @@ document.addEventListener("click",e=>{
 document.addEventListener("change",e=>{if(e.target.id==="restore"&&e.target.files[0]){restoreXlsx(e.target.files[0]);e.target.value=""}});
 document.addEventListener("input",e=>{if(e.target.id==="q"){S.q=e.target.value;const pos=e.target.selectionStart;render();const q=$("#q");if(q){q.focus();try{q.setSelectionRange(pos,pos)}catch(_){}}}});
 document.addEventListener("keydown",e=>{if(e.key==="Escape")closeModal()});
-function backupNote(){
+function backupNote(){if(FB){return}
   let last=null;try{last=localStorage.getItem("rent-last-backup")}catch(e){}
   const old=!last||daysBetween(last,today())>=7;
   $("#note").innerHTML=S.units.length&&old?`<div class="note" style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span>💾 ${last?"آخر نسخة احتياطية من "+daysBetween(last,today())+" يوم":"لسه ما نزّلتش نسخة احتياطية"} — البيانات محفوظة على الموبايل بس.</span><button class="btn" data-act="export" style="flex:none">نزّل نسخة</button></div>`:"";
