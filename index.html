@@ -92,7 +92,14 @@ h2.sec{font-size:16px;margin:16px 4px 8px}
 .f label{display:block;font-size:13px;font-weight:700;color:var(--muted);margin-bottom:4px}
 .f input,.f select,.f textarea{width:100%;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:#fff}
 .f input:focus,.f select:focus,.f textarea:focus{outline:2px solid var(--brand);border-color:transparent}
-.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.row2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
+/* a field never grows its column: iOS draws a date box at its own width, which
+   widened one column and pushed the row off both sides of the screen */
+.f{min-width:0}
+.f input,.f select,.f textarea{box-sizing:border-box;min-width:0;max-width:100%;min-height:44px}
+/* dates read left to right ("12 Nov 2026"), even in an Arabic page */
+input[type=date]{-webkit-appearance:none;appearance:none;direction:ltr;text-align:right}
+input[type=date]::-webkit-date-and-time-value{text-align:right}
 .seg{display:flex;gap:6px;flex-wrap:wrap}
 .seg button{border:1px solid var(--line);background:#fff;border-radius:10px;padding:7px 12px;cursor:pointer;font-weight:700}
 .seg button.on{background:var(--brand-2);border-color:var(--brand);color:var(--brand)}
