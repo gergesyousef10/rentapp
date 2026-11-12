@@ -557,7 +557,7 @@ function monthsGrid(t){
   const ms=[];for(let i=11;i>=0;i--)ms.push(addMonth(curMonth(),-i));
   return `<div class="yeargrid">${ms.map(m=>{const s=activeIn(t,m)?stat(t,m):null;const cls=!s?"fut":s.k==="idle"?"fut":s.k;
     return `<div class="ym ${cls}" title="${monthLabel(m)}">${MONTHS[+m.slice(5)-1]}<br>${!s?"—":s.k==="ok"?"✓":s.k==="part"?"جزء":s.k==="idle"?"·":"✗"}</div>`}).join("")}</div>
-    <div class="hint">✓ دفع · جزء = دفع جزء · ✗ ما دفعش · ⋅ مش شهر دفع · — مكانش مستأجر</div>`;
+    <div class="hint">✓ دفع · جزء = دفع جزء · ✗ ما دفعش · · مش شهر دفع · — مكانش مستأجر</div>`;
 }
 function payList(t){
   const ps=(D.payByT[t.id]||[]).slice().sort((a,b)=>(b.month+b.date).localeCompare(a.month+a.date));
@@ -720,7 +720,8 @@ function tenForm(unitId,t){
   const n=!t;
   modal(`<h3>${n?"➕ مستأجر جديد":"✏️ تعديل بيانات المستأجر"}</h3><div class="hint" style="margin:-6px 0 10px">${esc((D.unitById[unitId]||{}).name||"")}</div><form id="tf">${tenFields(t)}
    ${!n&&t.end?`<div class="f"><label>تاريخ الخروج</label><input name="end" type="date" value="${esc(t.end)}"></div>`:""}
-   <div class="foot"><button class="btn primary" type="submit">حفظ</button><button class="btn" type="button" data-act="close">إلغاء</button></div></form>`);
+   <div class="foot"><button class="btn primary" type="submit">حفظ</button><button class="btn" type="button" data-act="close">إلغاء</button></div>
+   ${!n&&!t.end?`<button class="btn danger block" type="button" style="margin-top:8px" data-delten="${t.id}">🗑 امسح المستأجر ده (لو اتسجل غلط)</button>`:""}</form>`);
   bindSegs();
   $("#tf").onsubmit=async e=>{e.preventDefault();const fd=new FormData(e.target);const o=readTen(fd,t,unitId);if(fd.has("end"))o.end=String(fd.get("end")||"");
     if(!o.tenant){toast("اكتب اسم المستأجر");return}
@@ -806,7 +807,7 @@ const SPECS={
   payments:{sheet:"الدفعات",cols:[["date","التاريخ"],["_tenant","المستأجر","ro"],["_unit","الوحدة","ro"],["month","عن شهر"],["amount","المبلغ","n"],["method","الطريقة"],["note","ملاحظة"],["id","id"],["unitId","unitId"],["tenancyId","tenancyId"],["createdAt","createdAt","n"]]},
   expenses:{sheet:"المصاريف",cols:[["date","التاريخ"],["cat","البند"],["amount","المبلغ","n"],["place","المكان"],["note","ملاحظة"],["month","الشهر"],["id","id"],["createdAt","createdAt","n"]]},
   sales:{sheet:"المبيعات",cols:[["buyer","المشتري"],["phone","التليفون"],["place","المكان"],["unitName","الشقة"],["price","السعر","n"],["_paid","اتدفع","ro"],["_remain","الباقي","ro"],["_over","متأخر","ro"],["date","تاريخ العقد"],["seller","البائع"],["notes","ملاحظات"],["sched","جدول الأقساط (متعدلوش)","json"],["status","الحالة"],["id","id"],["createdAt","createdAt","n"]]},
-  salePayments:{sheet:"دفعات المبيعات",cols:[["date","التاريخ"],["_buyer","المشتري","ro"],["_unit","الشقة","ro"],["amount","المبلغ","n"],["method","الطريقة"],["note","ملاحظة"],["id","id"],["saleId","saleId"],["createdAt","createdAt","n"]]}
+  salePayments:{sheet:"دفعات المبيعات",cols:[["date","التاريخ"],["_buyer","المشتري","ro"],["_unit","الشقة","ro"],["amount","المبلغ","n"],["method","الطريقة"],["note","ملاحظة"],["no","رقم الوصل","n"],["id","id"],["saleId","saleId"],["createdAt","createdAt","n"]]}
 };
 function roVal(col,key,o){
   if(col==="sales"){const c=saleCalc(o);return key==="_paid"?c.paidTot:key==="_remain"?c.remain:c.overdue}
@@ -846,7 +847,7 @@ async function restoreXlsx(file){
     found[col]=out}
   const n=COLS.reduce((a,c)=>a+(found[c]||[]).length,0);
   if(!n){toast("الملف مفيهوش بيانات");return}
-  modal(`<h3>📤 ترجيع من النسخة</h3><p>هيتضاف أو يتحدّث: ${(found.units||[]).length} وحدة، ${(found.tenancies||[]).length} مستأجر، ${(found.payments||[]).length} دفعة، ${(found.expenses||[]).length} مصروف.</p><p class="hint">الحاجات الموجودة دلوقتي ومش في الملف هتفضل زي ما هي.</p>
+  modal(`<h3>📤 ترجيع من النسخة</h3><p>هيتضاف أو يتحدّث: ${(found.units||[]).length} وحدة، ${(found.tenancies||[]).length} مستأجر، ${(found.payments||[]).length} دفعة، ${(found.expenses||[]).length} مصروف${(found.sales||[]).length?`، ${found.sales.length} بيعة، ${(found.salePayments||[]).length} دفعة مبيعات`:""}.</p><p class="hint">الحاجات الموجودة دلوقتي ومش في الملف هتفضل زي ما هي.</p>
   <div id="rprog" class="hint"></div><div class="foot"><button class="btn primary" id="go">رجّع</button><button class="btn" data-act="close">إلغاء</button></div>`);
   $("#go").onclick=async()=>{$("#go").disabled=true;let i=0;
     try{for(const c of COLS)for(const o of (found[c]||[])){await put(c,o,true);i++;if(i%5===0)$("#rprog").textContent=`${i} / ${n}`}}catch(e){$("#go").disabled=false;return}
@@ -859,8 +860,8 @@ function tafqeet(n){
   const ones=["","واحد","اثنان","ثلاثة","أربعة","خمسة","ستة","سبعة","ثمانية","تسعة","عشرة","أحد عشر","اثنا عشر","ثلاثة عشر","أربعة عشر","خمسة عشر","ستة عشر","سبعة عشر","ثمانية عشر","تسعة عشر"];
   const tens=["","","عشرون","ثلاثون","أربعون","خمسون","ستون","سبعون","ثمانون","تسعون"];
   const hund=["","مائة","مائتان","ثلاثمائة","أربعمائة","خمسمائة","ستمائة","سبعمائة","ثمانمائة","تسعمائة"];
-  const b1000=x=>{const p=[];const h=Math.floor(x/100),r=x%100;if(h)p.push(hund[h]);if(r){if(r<20)p.push(ones[r]);else p.push(r%10?ones[r%10]+" و"+tens[Math.floor(r/10)]:tens[Math.floor(r/10)])}return p.join(" و")};
-  const scale=(g,one,two,few,many)=>g===1?one:g===2?two:g<=10?b1000(g)+" "+few:b1000(g)+" "+many;
+  const b1000=(x,cs)=>{const p=[];const h=Math.floor(x/100),r=x%100;if(h)p.push(cs&&h===2&&!r?"مائتا":hund[h]);if(r){if(r<20)p.push(ones[r]);else p.push(r%10?ones[r%10]+" و"+tens[Math.floor(r/10)]:tens[Math.floor(r/10)])}return p.join(" و")};
+  const scale=(g,one,two,few,many)=>g===1?one:g===2?two:g<=10?b1000(g)+" "+few:b1000(g,1)+" "+many;
   const parts=[];const bil=Math.floor(n/1e9),mil=Math.floor(n%1e9/1e6),th=Math.floor(n%1e6/1e3),rest=n%1000;
   if(bil)parts.push(scale(bil,"مليار","ملياران","مليارات","مليار"));
   if(mil)parts.push(scale(mil,"مليون","مليونان","ملايين","مليون"));
@@ -869,6 +870,9 @@ function tafqeet(n){
   return parts.join(" و");
 }
 const SCOLS=["sales","salePayments"];
+// a receipt keeps its number for good, even if an older payment is added later
+const receiptNo=(p,all)=>p.no||(all.slice().sort((a,b)=>(a.createdAt||0)-(b.createdAt||0)).findIndex(x=>x.id===p.id)+1);
+const nextReceiptNo=sid=>{const all=S.salePayments.filter(x=>x.saleId===sid);return all.reduce((m,x,i)=>Math.max(m,x.no||0),all.length)+1};
 function saleCalc(sl){
   const pays=S.salePayments.filter(p=>p.saleId===sl.id).sort((a,b)=>(a.date||"").localeCompare(b.date||"")||(a.createdAt||0)-(b.createdAt||0));
   const paidTot=pays.reduce((a,p)=>a+(+p.amount||0),0);
@@ -936,7 +940,7 @@ function viewSale(){
    ${sl.phone?`<a class="btn wa" href="${saleWa(sl,c.next?c.next.left:0,c.next&&c.next.due)}" target="_blank" rel="noopener">💬 واتساب</a>`:""}</div></div>
   <h2 class="sec">جدول الأقساط</h2><div class="card">${c.items.map(i=>{const [cls,tx]=SK[i.k];return `<div class="pay"><div><div style="font-weight:800">${esc(i.label||"قسط")} — ${money(i.amt)}</div><div class="hint">${esc(i.due)}${i.pd>0&&i.left>0?" · اتدفع منه "+money(i.pd)+" · باقي "+money(i.left):""}</div></div><span class="pill ${cls}">${i.k==="no"?"متأخر "+daysBetween(i.due,td)+" يوم":tx}</span></div>`}).join("")||'<div class="hint">مفيش أقساط متسجلة.</div>'}
   ${c.credit>0?`<div class="hint">+ مدفوع زيادة عن الجدول: ${money(c.credit)}</div>`:""}</div>
-  <h2 class="sec">الدفعات والوصولات</h2><div class="card">${c.pays.slice().reverse().map(p=>{const n=c.pays.indexOf(p)+1;return `<div class="pay"><div><div style="font-weight:800">${money(p.amount)} <span class="hint">وصل رقم ${n}</span></div><div class="hint">${esc(p.date)} · ${esc(p.method||"كاش")}${p.note?" · "+esc(p.note):""}</div></div>
+  <h2 class="sec">الدفعات والوصولات</h2><div class="card">${c.pays.slice().reverse().map(p=>{const n=c.pays.indexOf(p)+1;return `<div class="pay"><div><div style="font-weight:800">${money(p.amount)} <span class="hint">وصل رقم ${receiptNo(p,c.pays)}</span></div><div class="hint">${esc(p.date)} · ${esc(p.method||"كاش")}${p.note?" · "+esc(p.note):""}</div></div>
    <div style="display:flex;gap:4px"><button class="btn" data-receipt="${p.id}">🧾 وصل</button>${canWrite?`<button class="x" data-delsalepay="${p.id}">🗑</button>`:""}</div></div>`}).join("")||'<div class="hint">لسه مفيش دفعات.</div>'}</div>`;
   if(canWrite)h+=`<button class="btn danger block" data-delsale="${sl.id}" style="margin-top:14px">🗑 امسح البيعة</button>`;
   return h;
@@ -985,7 +989,7 @@ function saleForm(sl){
     if(!o.buyer||!o.unitName||!o.price){toast("اكتب المشتري والشقة والسعر");return}
     if(!o.sched.length){toast("ضيف المقدم والأقساط في الجدول");return}
     try{await put("sales",o,true);
-      if(n&&fd.get("dppaid")){const dp=o.sched.find(i=>/مقدم/.test(i.label))||o.sched[0];await put("salePayments",{id:uid(),saleId:o.id,amount:dp.amount,date:dp.due<=today()?dp.due:today(),method:"كاش",note:dp.label,createdAt:Date.now()},true)}
+      const dp=n&&fd.get("dppaid")&&o.sched.find(i=>/مقدم/.test(i.label));if(dp){await put("salePayments",{id:uid(),saleId:o.id,no:nextReceiptNo(o.id),amount:dp.amount,date:dp.due<=today()?dp.due:today(),method:"كاش",note:dp.label,createdAt:Date.now()},true)}
       if(!S.sales.some(x=>x.id===o.id))S.sales.push(o);if(!DB)render();closeModal();toast("اتحفظ ✓");S.sale=o.id;S.tab="sales";render()}catch(_){}};
 }
 function salePayForm(sl){
@@ -998,7 +1002,7 @@ function salePayForm(sl){
   <div class="foot"><button class="btn primary" type="submit">تسجيل + وصل</button><button class="btn" type="button" data-act="close">إلغاء</button></div></form>`);
   bindSegs();
   $("#spf").onsubmit=async e=>{e.preventDefault();const fd=new FormData(e.target);
-    const p={id:uid(),saleId:sl.id,amount:+fd.get("amount")||0,date:String(fd.get("date")||today()),method:segVal("smseg")||"كاش",note:String(fd.get("note")||"").trim(),createdAt:Date.now()};
+    const p={id:uid(),saleId:sl.id,no:nextReceiptNo(sl.id),amount:+fd.get("amount")||0,date:String(fd.get("date")||today()),method:segVal("smseg")||"كاش",note:String(fd.get("note")||"").trim(),createdAt:Date.now()};
     if(p.amount<=0){toast("اكتب المبلغ");return}
     try{await put("salePayments",p);closeModal();toast("اتسجلت الدفعة ✓");setTimeout(()=>receiptModal(p.id,sl,p),250)}catch(_){}};
 }
@@ -1012,7 +1016,7 @@ async function drawReceipt(sl,p){
   g.fillStyle="#fff";g.fillRect(0,0,W,H);
   g.fillStyle="#1f5f4a";g.fillRect(0,0,W,210);
   g.direction="rtl";g.textAlign="center";g.fillStyle="#fff";g.font=F(800,64);g.fillText("إيصال استلام نقدية",W/2,105);
-  g.font=F(400,32);g.fillText(`إيصال رقم ${idx+1}    ·    ${p.date}`,W/2,165);
+  g.font=F(400,32);g.fillText(`إيصال رقم ${receiptNo(p,all)}    ·    ${p.date}`,W/2,165);
   g.textAlign="right";let y=300;const R=W-80;
   const sep=()=>{g.strokeStyle="#eee";g.lineWidth=2;g.beginPath();g.moveTo(80,y-28);g.lineTo(R,y-28);g.stroke()};
   const line=(k,v,big)=>{g.fillStyle="#6b6f76";g.font=F(600,30);g.fillText(k,R,y);g.fillStyle="#1f2328";g.font=F(big?800:700,big?56:38);g.fillText(v,R,y+(big?70:54));y+=big?125:110;if(!big)sep()};
@@ -1045,7 +1049,7 @@ async function receiptModal(pid,sl,p){
   $("#rdl").onclick=dl;
   $("#rshare").onclick=async()=>{const file=new File([blob],fn,{type:"image/png"});
     if(navigator.canShare&&navigator.canShare({files:[file]})){try{await navigator.share({files:[file],text:`وصل استلام ${money(p.amount)} — ${saleLabel(sl)}`});return}catch(e){if(e&&e.name==="AbortError")return}}
-    dl();const w=saleWa(sl,0);if(w)setTimeout(()=>toast("اتنزّل الوصل — ابعته على واتساب من الصور"),300)};
+    dl();setTimeout(()=>toast("اتنزّل الوصل — ابعته على واتساب من الصور"),300)};
 }
 document.addEventListener("click",e=>{
   const t=e.target;const g=a=>{const el=t.closest("["+a+"]");return el?el.getAttribute(a):null};let v;
@@ -1056,7 +1060,7 @@ document.addEventListener("click",e=>{
   if((v=g("data-editsale"))){saleForm(S.sales.find(x=>x.id===v));return}
   if((v=g("data-receipt"))){receiptModal(v);return}
   if((v=g("data-delsalepay"))){const id=v;confirmBox("تمسح الدفعة دي؟",()=>del("salePayments",id));return}
-  if((v=g("data-delsale"))){const id=v;confirmBox("تمسح البيعة دي وكل دفعاتها؟",async()=>{for(const p of S.salePayments.filter(x=>x.saleId===id))await del("salePayments",p.id);await del("sales",id);S.sale=null;render()});return}
+  if((v=g("data-delsale"))){const id=v;confirmBox("تمسح البيعة دي وكل دفعاتها؟",async()=>{await delMany(S.salePayments.filter(x=>x.saleId===id).map(p=>["salePayments",p.id]).concat([["sales",id]]));S.sale=null;render()});return}
 });
 
 /* ---------------- events ---------------- */
