@@ -37,7 +37,7 @@ header.top h1 .logo{width:34px;height:34px;border-radius:10px;background:var(--b
 .monthbar .m{font-weight:800;font-size:18px}
 .iconbtn{border:1px solid var(--line);background:#fff;width:40px;height:40px;border-radius:10px;cursor:pointer;font-size:18px;display:grid;place-items:center}
 .iconbtn:hover{background:var(--brand-2)}
-.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:12px}
 .stat{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px}
 .stat .l{font-size:12px;color:var(--muted);font-weight:600}
 .stat .v{font-size:18px;font-weight:800;margin-top:2px;white-space:nowrap}
@@ -71,10 +71,12 @@ header.top h1 .logo{width:34px;height:34px;border-radius:10px;background:var(--b
 .empty .big{font-size:44px}
 .empty h3{color:var(--ink);margin:8px 0 4px}
 .back{display:inline-flex;align-items:center;gap:6px;border:0;background:none;color:var(--brand);font-weight:700;cursor:pointer;padding:4px 0;margin-bottom:8px}
-.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:15px}
+.kv{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 14px;font-size:15px}
 .kv dt{color:var(--muted)} .kv dd{margin:0;font-weight:700}
-.yeargrid{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
-.ym{border-radius:10px;padding:6px 4px;text-align:center;font-size:12px;font-weight:700;border:1px solid var(--line)}
+.yeargrid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px}
+.ym{border-radius:10px;padding:6px 2px;text-align:center;font-size:12px;font-weight:700;border:1px solid var(--line);min-width:0;white-space:nowrap;overflow:hidden}
+/* a month name never breaks in the middle: four to a row on narrow phones */
+@media(max-width:400px){.yeargrid{grid-template-columns:repeat(4,minmax(0,1fr))}}
 .ym.ok{background:var(--ok-bg);color:var(--ok);border-color:transparent}
 .ym.part{background:var(--warn-bg);color:var(--warn);border-color:transparent}
 .ym.no{background:var(--bad-bg);color:var(--bad);border-color:transparent}
@@ -107,9 +109,11 @@ input[type=date]::-webkit-date-and-time-value{text-align:right}
 .sheet .foot .btn{flex:1;justify-content:center;padding:11px}
 .toast{position:fixed;top:16px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:9px 18px;border-radius:99px;font-weight:700;z-index:30;font-size:14px;box-shadow:0 6px 20px rgba(0,0,0,.2)}
 .note{background:var(--warn-bg);color:var(--warn);border-radius:10px;padding:8px 12px;font-size:13px;margin-bottom:12px}
-@media(max-width:560px){.stats{grid-template-columns:repeat(2,1fr)}.stat .v{font-size:17px}}
+@media(max-width:560px){.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.stat .v{font-size:17px}}
+/* on the narrowest phones a seven-figure amount must still fit its tile */
+@media(max-width:360px){.stat{padding:10px 8px}.stat .v{font-size:15px}}
 
-.stats.s3{grid-template-columns:repeat(3,1fr)}
+.stats.s3{grid-template-columns:repeat(3,minmax(0,1fr))}
 .alerts{margin-bottom:12px}
 .alert{background:var(--warn-bg);color:var(--warn);border-radius:12px;padding:9px 12px;font-size:14px;margin-bottom:6px;cursor:pointer}
 .alert.bad{background:var(--bad-bg);color:var(--bad)}
@@ -130,11 +134,11 @@ td{padding:7px 6px;border-bottom:1px solid var(--line);white-space:nowrap}
 tr.futr td{color:#aaa} tr.tot td{font-weight:800;border-bottom:0;background:var(--brand-2)}
 .okc{color:var(--ok)} .badc{color:var(--bad)}
 .tabs button{font-size:14px}
-@media(max-width:560px){.stats.s3{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:560px){.stats.s3{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .chk{display:flex;gap:8px;align-items:center;font-weight:700;margin:4px 0 8px;font-size:14px}.chk input{width:18px;height:18px}
 
 .tabs button{font-size:13px;padding:9px 2px}
-.srow{display:grid;grid-template-columns:1.1fr 1.2fr 1fr auto;gap:6px;margin-bottom:6px}.srow input{border:1px solid var(--line);border-radius:8px;padding:8px;min-width:0;width:100%;background:#fff}
+.srow{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1.2fr) minmax(0,1fr) auto;gap:6px;margin-bottom:6px}.srow input{border:1px solid var(--line);border-radius:8px;padding:8px;min-width:0;width:100%;background:#fff}
 
 header.top h1{white-space:nowrap;font-size:20px}
 .badge-mode{white-space:nowrap}
@@ -445,7 +449,7 @@ function groupBy(arr,key){const g={};arr.forEach(x=>{const k=key(x)||"بدون �
 const byName=(a,b)=>(a.name||"").localeCompare(b.name||"","ar",{numeric:true});
 function waLink(t,amount,m){
   let p=String(t.phone||"").replace(/\D/g,"");if(!p)return null;
-  if(p.startsWith("00"))p=p.slice(2);else if(p.startsWith("0"))p="20"+p.slice(1);
+  if(p.startsWith("00"))p=p.slice(2);else if(p.startsWith("0"))p="20"+p.slice(1);else if(/^1\d{9}$/.test(p))p="20"+p;
   const msg=amount>0?`السلام عليكم يا أستاذ ${t.tenant}، تذكير بسيط بإيجار ${label(t)}${m?" عن "+monthLabel(m):""}. المبلغ المطلوب ${money(amount)}. شكراً ليك 🙏`:`السلام عليكم يا أستاذ ${t.tenant}`;
   return "https://wa.me/"+p+"?text="+encodeURIComponent(msg);
 }
@@ -551,7 +555,7 @@ function viewUnits(){
 function monthsGrid(t){
   const ms=[];for(let i=11;i>=0;i--)ms.push(addMonth(curMonth(),-i));
   return `<div class="yeargrid">${ms.map(m=>{const s=activeIn(t,m)?stat(t,m):null;const cls=!s?"fut":s.k==="idle"?"fut":s.k;
-    return `<div class="ym ${cls}" title="${monthLabel(m)}">${MONTHS[+m.slice(5)-1].slice(0,5)}<br>${!s?"—":s.k==="ok"?"✓":s.k==="part"?"جزء":s.k==="idle"?"·":"✗"}</div>`}).join("")}</div>
+    return `<div class="ym ${cls}" title="${monthLabel(m)}">${MONTHS[+m.slice(5)-1]}<br>${!s?"—":s.k==="ok"?"✓":s.k==="part"?"جزء":s.k==="idle"?"·":"✗"}</div>`}).join("")}</div>
     <div class="hint">✓ دفع · جزء = دفع جزء · ✗ ما دفعش · ⋅ مش شهر دفع · — مكانش مستأجر</div>`;
 }
 function payList(t){
@@ -692,7 +696,7 @@ function readTen(fd,base,unitId){
   t.dueDay=Math.min(31,Math.max(1,+fd.get("dueDay")||1));t.deposit=+fd.get("deposit")||0;t.incPct=+fd.get("incPct")||0;
   t.freq=+segVal("freqseg")||1;t.notes=String(fd.get("tnotes")||"").trim();t.end=t.end||"";
   let rent=+fd.get("rent")||0;{const r0=((base&&base.rents)||[]).slice().sort((a,b)=>a.from.localeCompare(b.from))[0];if(r0&&Math.abs(r0.amount-rent)<0.01)rent=r0.amount}const r=(t.rents||[]).slice().sort((a,b)=>a.from.localeCompare(b.from));
-  if(r.length){r[0]={from:t.start.slice(0,7),amount:rent};t.rents=r.filter((x,i)=>i===0||x.from>r[0].from)}else t.rents=[{from:t.start.slice(0,7),amount:rent}];
+  if(r.length){const sm=t.start.slice(0,7),typed=Math.abs(rent-r[0].amount)>=0.01;let a=rent;if(!typed)r.forEach((x,i)=>{if(i&&x.from<=sm)a=x.amount});r[0]={from:sm,amount:a};t.rents=r.filter((x,i)=>i===0||x.from>sm)}else t.rents=[{from:t.start.slice(0,7),amount:rent}];
   return t;
 }
 function unitForm(u){
@@ -883,7 +887,7 @@ const saleLabel=sl=>(sl.unitName||"")+(sl.place?" - "+sl.place:"");
 const SK={ok:["ok","اتدفع ✓"],part:["part","دفع جزء"],no:["no","متأخر"],soon:["part","قرّب"],idle:["idle","لسه"]};
 function saleWa(sl,amount,due){
   let p=String(sl.phone||"").replace(/\D/g,"");if(!p)return null;
-  if(p.startsWith("00"))p=p.slice(2);else if(p.startsWith("0"))p="20"+p.slice(1);
+  if(p.startsWith("00"))p=p.slice(2);else if(p.startsWith("0"))p="20"+p.slice(1);else if(/^1\d{9}$/.test(p))p="20"+p;
   const msg=`السلام عليكم يا أستاذ ${sl.buyer}، تذكير بقسط ${saleLabel(sl)}${due?" المستحق يوم "+due:""}، المبلغ ${money(amount)}. شكراً ليك 🙏`;
   return "https://wa.me/"+p+"?text="+encodeURIComponent(msg);
 }
